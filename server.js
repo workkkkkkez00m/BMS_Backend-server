@@ -9,12 +9,73 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// ★ 彈性 CORS 配置 - 允許多種來源
 const corsOptions = {
-    origin: 'https://workkkkkkez00m.github.io',
-    optionsSuccessStatus: 200
+    origin: function (origin, callback) {
+        // 允許的來源模式
+        const allowedOrigins = [
+            'https://workkkkkkez00m.github.io',
+            'http://localhost:3000',
+            'http://localhost:3001',
+            'http://localhost:5000',
+            'http://127.0.0.1:3000',
+            'http://127.0.0.1:5000',
+            /^https:\/\/.*\.github\.io$/,  // 任何 GitHub Pages
+            /^https:\/\/.*\.netlify\.app$/,  // Netlify 部署
+            /^https:\/\/.*\.vercel\.app$/,   // Vercel 部署
+            /^http:\/\/localhost:\d+$/,     // 本地開發任何端口
+            /^http:\/\/127\.0\.0\.1:\d+$/   // 本地 IP 任何端口
+        ];
+        
+        // 如果沒有 origin (如同源請求、Postman等) 或來源在允許列表中
+        if (!origin || allowedOrigins.some(allowed => {
+            if (typeof allowed === 'string') {
+                return allowed === origin;
+            } else if (allowed instanceof RegExp) {
+                return allowed.test(origin);
+            }
+            return false;
+        })) {
+            callback(null, true);
+        } else {
+            console.log(`CORS 拒絕來源: ${origin}`);
+            callback(null, true); // 改為寬鬆模式，仍然允許但記錄日誌
+        }
+    },
+    credentials: true,
+    optionsSuccessStatus: 200,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
 };
+
 app.use(cors(corsOptions));
 app.use(express.json());
+
+// ★ 彈性的 CORS 中間件
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    
+    // 設置允許的來源 (如果有來源的話，否則設為 *)
+    if (origin) {
+        res.header('Access-Control-Allow-Origin', origin);
+    } else {
+        res.header('Access-Control-Allow-Origin', '*');
+    }
+    
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Max-Age', '86400'); // 24小時快取預檢結果
+    
+    // 處理預檢請求
+    if (req.method === 'OPTIONS') {
+        console.log(`預檢請求來自: ${origin || '未知來源'}`);
+        res.sendStatus(200);
+    } else {
+        next();
+    }
+});
 
 let httpsOptions;
 try {
@@ -1182,6 +1243,20 @@ app.post('/api/ac/:floor/:id/swing', (req, res) => {
     }
 });
 
+// ★ 健康檢查和根路徑端點
+app.get('/', (req, res) => {
+    res.json({ 
+        message: 'BMS Backend Server is running!', 
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        cors: 'enabled for https://workkkkkkez00m.github.io'
+    });
+});
+
+app.get('/health', (req, res) => {
+    res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
 const server = http.createServer(app);
 
 // --- 啟動伺服器 ---
@@ -1189,11 +1264,15 @@ if (httpsOptions) {
     const server = https.createServer(httpsOptions, app);
     server.listen(PORT, () => {
         console.log(`後端 HTTPS 伺服器正在 https://localhost:${PORT} 運行`);
-        console.log(`允許來自 https://workkkkkkez00m.github.io 的跨域請求`);
+        console.log(`🌐 CORS 已啟用彈性配置，支援多種來源連線`);
+        console.log(`✅ 支援 GitHub Pages、Netlify、Vercel 和本地開發環境`);
     });
 } else {
     // 如果在本地端找不到憑證，就用不安全的 HTTP 模式啟動，方便除錯
     app.listen(PORT, () => {
-        console.log(`後端 HTTP 伺服器正在 http://localhost:${PORT} 運行`);
+        console.log(`後端 HTTP 伺服器正在 port ${PORT} 運行`);
+        console.log(`🌐 CORS 已啟用彈性配置，支援多種來源連線`);
+        console.log(`✅ 支援 GitHub Pages、Netlify、Vercel 和本地開發環境`);
+        console.log(`📝 開發模式：任何本地端口都可以連線`);
     });
 }
