@@ -8,8 +8,12 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-
-app.use(cors());
+const PORT = process.env.PORT || 3000;
+const corsOptions = {
+    origin: 'https://workkkkkkez00m.github.io',
+    optionsSuccessStatus: 200
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 
 let httpsOptions;
@@ -1178,14 +1182,18 @@ app.post('/api/ac/:floor/:id/swing', (req, res) => {
     }
 });
 
-app.post('/api/ac/:floor/:id/control', (req, res) => {
-    const unit = acData[req.params.floor]?.find(u => u.id === req.params.id);
-    if (unit) {
-        Object.assign(unit, req.body);
-        res.status(200).json(unit);
-    } else {
-        res.status(404).send();
-    }
-});
+const server = http.createServer(app);
 
-module.exports = app;
+// --- 啟動伺服器 ---
+if (httpsOptions) {
+    const server = https.createServer(httpsOptions, app);
+    server.listen(PORT, () => {
+        console.log(`後端 HTTPS 伺服器正在 https://localhost:${PORT} 運行`);
+        console.log(`允許來自 https://workkkkkkez00m.github.io 的跨域請求`);
+    });
+} else {
+    // 如果在本地端找不到憑證，就用不安全的 HTTP 模式啟動，方便除錯
+    app.listen(PORT, () => {
+        console.log(`後端 HTTP 伺服器正在 http://localhost:${PORT} 運行`);
+    });
+}
