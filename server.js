@@ -2,11 +2,13 @@
 const express = require('express');
 const cors = require('cors');
 const ModbusRTU = require("modbus-serial");
+const http = require('http');
 const https = require('https');
 const fs = require('fs');
+const path = require('path');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const corsOptions = {
     origin: 'https://workkkkkkez00m.github.io',
     optionsSuccessStatus: 200
