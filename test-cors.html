@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>彈性 CORS 測試</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🌐 彈性 CORS 連線測試</h1>
+    
+    <div class="test-section">
+        <h2>基本連線測試</h2>
+        <button onclick="testBasicConnection()">測試基本連線</button>
+        <button onclick="testHealthCheck()">測試健康檢查</button>
+        <div id="basic-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>API 功能測試</h2>
+        <button onclick="testParkingAPI()">測試停車場 API</button>
+        <button onclick="testElevatorAPI()">測試電梯 API</button>
+        <button onclick="testACAPI()">測試空調 API</button>
+        <div id="api-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>CORS 來源測試</h2>
+        <p class="info">當前來源: <span id="current-origin"></span></p>
+        <button onclick="testCORSHeaders()">檢查 CORS Headers</button>
+        <div id="cors-result"></div>
+    </div>
+
+    <script>
+        // 顯示當前來源
+        document.getElementById('current-origin').textContent = window.location.origin;
+        
+        const API_BASE = 'https://bms-backend-server1.onrender.com';
+        
+        async function testBasicConnection() {
+            const resultDiv = document.getElementById('basic-result');
+            resultDiv.innerHTML = '<p>測試中...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/`, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultDiv.innerHTML = `
+                        <p class="success">✅ 基本連線成功！</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<p class="error">❌ 連線失敗: ${response.status}</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ 連線錯誤: ${error.message}</p>`;
+            }
+        }
+        
+        async function testHealthCheck() {
+            const resultDiv = document.getElementById('basic-result');
+            resultDiv.innerHTML = '<p>測試健康檢查中...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                resultDiv.innerHTML += `
+                    <p class="success">✅ 健康檢查成功！</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML += `<p class="error">❌ 健康檢查失敗: ${error.message}</p>`;
+            }
+        }
+        
+        async function testParkingAPI() {
+            const resultDiv = document.getElementById('api-result');
+            resultDiv.innerHTML = '<p>測試停車場 API...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/parking/b3f`);
+                const data = await response.json();
+                resultDiv.innerHTML = `
+                    <p class="success">✅ 停車場 API 成功！</p>
+                    <p>找到 ${data.length} 個停車位</p>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ 停車場 API 失敗: ${error.message}</p>`;
+            }
+        }
+        
+        async function testElevatorAPI() {
+            const resultDiv = document.getElementById('api-result');
+            resultDiv.innerHTML += '<p>測試電梯 API...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/elevators`);
+                const data = await response.json();
+                resultDiv.innerHTML += `
+                    <p class="success">✅ 電梯 API 成功！</p>
+                    <p>找到 ${data.length} 部電梯</p>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML += `<p class="error">❌ 電梯 API 失敗: ${error.message}</p>`;
+            }
+        }
+        
+        async function testACAPI() {
+            const resultDiv = document.getElementById('api-result');
+            resultDiv.innerHTML += '<p>測試空調 API...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/ac/1f`);
+                const data = await response.json();
+                resultDiv.innerHTML += `
+                    <p class="success">✅ 空調 API 成功！</p>
+                    <p>找到 ${data.length} 台空調設備</p>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML += `<p class="error">❌ 空調 API 失敗: ${error.message}</p>`;
+            }
+        }
+        
+        async function testCORSHeaders() {
+            const resultDiv = document.getElementById('cors-result');
+            resultDiv.innerHTML = '<p>檢查 CORS Headers...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/`, {
+                    method: 'OPTIONS'
+                });
+                
+                const corsHeaders = {
+                    'Access-Control-Allow-Origin': response.headers.get('Access-Control-Allow-Origin'),
+                    'Access-Control-Allow-Methods': response.headers.get('Access-Control-Allow-Methods'),
+                    'Access-Control-Allow-Headers': response.headers.get('Access-Control-Allow-Headers'),
+                    'Access-Control-Allow-Credentials': response.headers.get('Access-Control-Allow-Credentials')
+                };
+                
+                resultDiv.innerHTML = `
+                    <p class="success">✅ CORS Headers 檢查完成！</p>
+                    <pre>${JSON.stringify(corsHeaders, null, 2)}</pre>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ CORS Headers 檢查失敗: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>
