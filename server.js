@@ -2,17 +2,33 @@
 const express = require('express');
 const cors = require('cors');
 const ModbusRTU = require("modbus-serial");
-const http = require('http');
+const https = require('https');
+const fs = require('fs');
 
 const app = express();
 const PORT = 3000;
-app.use(cors());
+const corsOptions = {
+    origin: 'https://workkkkkkez00m.github.io',
+    optionsSuccessStatus: 200
+};
+app.use(cors(corsOptions));
 app.use(express.json());
+
+let httpsOptions;
+try {
+    httpsOptions = {
+        key: fs.readFileSync(path.join(__dirname, 'key.pem')),
+        cert: fs.readFileSync(path.join(__dirname, 'cert.pem'))
+    };
+} catch (e) {
+    console.warn("SSL 憑證檔案 (key.pem, cert.pem) 未找到，將以不安全的 HTTP 模式啟動。");
+}
 
 // ★ Modbus 用戶端
 const client = new ModbusRTU();
 const modbusHost = "192.168.41.223";
 const modbusPort = 502;
+const modbusSlaveId = 1;
 
 // ★ 核心修改：將連線的邏輯，封裝在一個函式中
 async function ensureModbusConnection() {
@@ -25,6 +41,7 @@ async function ensureModbusConnection() {
         client.close(() => {});
         // 重新建立 TCP 連線
         await client.connectTCP(modbusHost, { port: modbusPort });
+        client.setID(modbusSlaveId);
         console.log("[Modbus Client] 已成功重新連接到 Modbus 模擬器。");
         return true;
     } catch (err) {
@@ -766,14 +783,23 @@ setInterval(async () => {
 
         for (const floor in acData) {
             for (const unit of acData[floor]) {
-                // ★ 核心修改：改為讀取 Holding Registers
-                const response = await client.readHoldingRegisters(unit.modbusAddress, 1);
-                const newStatus = response.data[0] === 1 ? "運轉中" : "停止";
-                
+                // 1. 讀取開關狀態 (Holding Registers, 位址 0-20)
+                const statusResponse = await client.readHoldingRegisters(unit.modbusAddress, 1);
+                const newStatus = statusResponse.data[0] === 256 ? "運轉中" : "停止";
                 if (unit.status !== newStatus) {
-                    console.log(`[Modbus Client] 狀態更新: ${unit.locationName} 的狀態從 ${unit.status} 變為 ${newStatus}`);
                     unit.status = newStatus;
                 }
+
+                // 2. ★ 修正：讀取現在溫度 (根據CSV配置，地址從22開始，每個設備+2)
+                const tempReadAddress = 22 + (unit.modbusAddress * 2);
+                const currentTempResponse = await client.readHoldingRegisters(tempReadAddress, 1);
+                unit.currentTemperature = currentTempResponse.data[0] / 10.0;
+
+                // 3. ★ 修正：讀取設定溫度 (使用相同的溫度地址)
+                const setTempResponse = await client.readHoldingRegisters(tempReadAddress, 1);
+                unit.setTemperature = setTempResponse.data[0] / 10.0;
+                
+                console.log(`[溫度監控] ${unit.locationName} (地址:${tempReadAddress}) - 現在溫度: ${unit.currentTemperature}°C, 設定溫度: ${unit.setTemperature}°C`);
             }
         }
     } catch (err) {
@@ -1044,7 +1070,7 @@ app.post('/api/ac/:floor/:id/status', async (req, res) => {
         return res.status(404).json({ error: `AC unit not found.` });
     }
 
-    const valueToWrite = (status === "運轉中") ? 1 : 0;
+    const valueToWrite = (status === "運轉中") ? 256 : 0;
 
     console.log(`--------------------------------------------------`);
     console.log(`[API] 收到前端請求: ${unit.locationName} -> ${status}`);
@@ -1055,9 +1081,9 @@ app.post('/api/ac/:floor/:id/status', async (req, res) => {
             throw new Error("無法連接到 Modbus 設備。");
         }
 
-        console.log(`[API -> Modbus] 正在發送寫入指令... (位址: ${unit.modbusAddress}, 值: ${valueToWrite})`);
-        // ★ 核心修改：改為寫入單一 Register
-        await client.writeRegister(unit.modbusAddress, valueToWrite);
+        console.log(`[API -> Modbus] 正在發送寫入指令... (位址: ${unit.modbusAddress}, 值: ${valueToWrite})`);        
+        client.setID(modbusSlaveId);
+        await client.writeRegisters(unit.modbusAddress, [valueToWrite]);
         console.log(`[API -> Modbus] 指令已成功發送！`);
         
         unit.status = status;
@@ -1071,27 +1097,37 @@ app.post('/api/ac/:floor/:id/status', async (req, res) => {
     }
 });
 // ★★★ 用來接收「溫度調整指令」的 POST API ★★★
-app.post('/api/ac/:floor/:id/temperature', (req, res) => {
+app.post('/api/ac/:floor/:id/temperature', async (req, res) => {
     const { floor, id } = req.params;
     const { temperature } = req.body;
     
-    if (!acData[floor]) {
-        return res.status(404).json({ error: `Floor ${floor} not found.` });
+    const unit = acData[floor]?.find(u => u.id === id);
+    if (!unit) {
+        return res.status(404).json({ error: `AC unit not found.` });
     }
 
-    const unit = acData[floor].find(u => u.id === id);
-
-    if (unit) {
-        const newTemp = parseInt(temperature);
-        if (!isNaN(newTemp) && newTemp >= 16 && newTemp <= 32) {
-            unit.setTemperature = newTemp;
-            console.log(`空調溫度已手動設定: ${floor} - ${unit.locationName} 的設定溫度為 ${unit.setTemperature}°C`);
-            res.status(200).json(unit);
-        } else {
-            res.status(400).json({ error: `Invalid temperature: ${temperature}` });
+    try {
+        const isConnected = await ensureModbusConnection();
+        if (!isConnected) {
+            throw new Error("無法連接到 Modbus 設備。");
         }
-    } else {
-        res.status(404).json({ error: `AC unit with id ${id} not found on floor ${floor}.` });
+
+        // ★ 修正：根據CSV配置計算正確的溫度寫入地址
+        const tempWriteAddress = 22 + (unit.modbusAddress * 2);
+        const valueToWrite = Math.round(temperature * 10); // 乘以 10 轉換為整數
+        
+        console.log(`[溫度調整] ${unit.locationName} -> ${temperature}°C (地址: ${tempWriteAddress}, 值: ${valueToWrite})`);
+        
+        client.setID(modbusSlaveId);
+        await client.writeRegister(tempWriteAddress, valueToWrite);
+        console.log(`[溫度調整] ✓ 溫度設定指令已成功發送到設備！(地址: ${tempWriteAddress}, 值: ${valueToWrite})`);
+        
+        unit.setTemperature = temperature;
+        res.status(200).json(unit);
+
+    } catch (err) {
+        console.error("[API -> Modbus] 寫入溫度失敗:", err.message);
+        res.status(500).json({ error: "寫入 Modbus 設備失敗", details: err.message });
     }
 });
 // ★★★ 用來接收「風速調整指令」的 POST API ★★★
@@ -1147,6 +1183,15 @@ app.post('/api/ac/:floor/:id/swing', (req, res) => {
 const server = http.createServer(app);
 
 // --- 啟動伺服器 ---
-app.listen(PORT, () => {
-    console.log(`後端伺服器正在 http://localhost:${PORT} 運行`);   
-});
+if (httpsOptions) {
+    const server = https.createServer(httpsOptions, app);
+    server.listen(PORT, () => {
+        console.log(`後端 HTTPS 伺服器正在 https://localhost:${PORT} 運行`);
+        console.log(`允許來自 https://workkkkkkez00m.github.io 的跨域請求`);
+    });
+} else {
+    // 如果在本地端找不到憑證，就用不安全的 HTTP 模式啟動，方便除錯
+    app.listen(PORT, () => {
+        console.log(`後端 HTTP 伺服器正在 http://localhost:${PORT} 運行`);
+    });
+}
