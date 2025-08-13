@@ -79,12 +79,18 @@ app.use((req, res, next) => {
 
 let httpsOptions;
 try {
-    httpsOptions = {
-        key: fs.readFileSync(path.join(__dirname, 'key.pem')),
-        cert: fs.readFileSync(path.join(__dirname, 'cert.pem'))
-    };
+    // 只在本地環境嘗試讀取 SSL 憑證
+    if (!process.env.RENDER && fs.existsSync(path.join(__dirname, 'key.pem')) && fs.existsSync(path.join(__dirname, 'cert.pem'))) {
+        httpsOptions = {
+            key: fs.readFileSync(path.join(__dirname, 'key.pem')),
+            cert: fs.readFileSync(path.join(__dirname, 'cert.pem'))
+        };
+        console.log("本地 SSL 憑證已載入");
+    } else {
+        console.log("雲端環境或憑證檔案不存在，使用 HTTP 模式");
+    }
 } catch (e) {
-    console.warn("SSL 憑證檔案 (key.pem, cert.pem) 未找到，將以不安全的 HTTP 模式啟動。");
+    console.warn("SSL 憑證檔案讀取失敗，將以 HTTP 模式啟動:", e.message);
 }
 
 // ★ Modbus 用戶端
@@ -1257,22 +1263,30 @@ app.get('/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-const server = http.createServer(app);
-
 // --- 啟動伺服器 ---
-if (httpsOptions) {
+// 檢測環境
+const isRenderEnv = process.env.RENDER || process.env.NODE_ENV === 'production';
+const HOST = process.env.HOST || '0.0.0.0'; // Render 需要監聽 0.0.0.0
+
+if (httpsOptions && !isRenderEnv) {
+    // 本地開發環境使用 HTTPS
     const server = https.createServer(httpsOptions, app);
-    server.listen(PORT, () => {
+    server.listen(PORT, 'localhost', () => {
         console.log(`後端 HTTPS 伺服器正在 https://localhost:${PORT} 運行`);
         console.log(`🌐 CORS 已啟用彈性配置，支援多種來源連線`);
         console.log(`✅ 支援 GitHub Pages、Netlify、Vercel 和本地開發環境`);
     });
 } else {
-    // 如果在本地端找不到憑證，就用不安全的 HTTP 模式啟動，方便除錯
-    app.listen(PORT, () => {
-        console.log(`後端 HTTP 伺服器正在 port ${PORT} 運行`);
+    // 雲端環境或本地 HTTP 模式
+    app.listen(PORT, HOST, () => {
+        const envType = isRenderEnv ? '雲端' : '本地';
+        const url = isRenderEnv ? `https://bms-backend-server1.onrender.com` : `http://${HOST}:${PORT}`;
+        console.log(`🚀 ${envType} HTTP 伺服器正在 ${url} 運行`);
         console.log(`🌐 CORS 已啟用彈性配置，支援多種來源連線`);
         console.log(`✅ 支援 GitHub Pages、Netlify、Vercel 和本地開發環境`);
-        console.log(`📝 開發模式：任何本地端口都可以連線`);
+        if (!isRenderEnv) {
+            console.log(`📝 開發模式：任何本地端口都可以連線`);
+        }
+        console.log(`🔧 環境變數 PORT: ${PORT}, HOST: ${HOST}`);
     });
 }
