@@ -3,89 +3,11 @@ const express = require('express');
 const cors = require('cors');
 const ModbusRTU = require("modbus-serial");
 const http = require('http');
-const https = require('https');
-const fs = require('fs');
-const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
-// ★ 彈性 CORS 配置 - 允許多種來源
-const corsOptions = {
-    origin: function (origin, callback) {
-        // 允許的來源模式
-        const allowedOrigins = [
-            'https://workkkkkkez00m.github.io',
-            'http://localhost:3000',
-            'http://localhost:3001',
-            'http://localhost:5000',
-            'http://127.0.0.1:3000',
-            'http://127.0.0.1:5000',
-            /^https:\/\/.*\.github\.io$/,  // 任何 GitHub Pages
-            /^https:\/\/.*\.netlify\.app$/,  // Netlify 部署
-            /^https:\/\/.*\.vercel\.app$/,   // Vercel 部署
-            /^http:\/\/localhost:\d+$/,     // 本地開發任何端口
-            /^http:\/\/127\.0\.0\.1:\d+$/   // 本地 IP 任何端口
-        ];
-        
-        // 如果沒有 origin (如同源請求、Postman等) 或來源在允許列表中
-        if (!origin || allowedOrigins.some(allowed => {
-            if (typeof allowed === 'string') {
-                return allowed === origin;
-            } else if (allowed instanceof RegExp) {
-                return allowed.test(origin);
-            }
-            return false;
-        })) {
-            callback(null, true);
-        } else {
-            console.log(`CORS 拒絕來源: ${origin}`);
-            callback(null, true); // 改為寬鬆模式，仍然允許但記錄日誌
-        }
-    },
-    credentials: true,
-    optionsSuccessStatus: 200,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
-};
-
-app.use(cors(corsOptions));
+const PORT = 3000;
+app.use(cors());
 app.use(express.json());
-
-// ★ 彈性的 CORS 中間件
-app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    
-    // 設置允許的來源 (如果有來源的話，否則設為 *)
-    if (origin) {
-        res.header('Access-Control-Allow-Origin', origin);
-    } else {
-        res.header('Access-Control-Allow-Origin', '*');
-    }
-    
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Max-Age', '86400'); // 24小時快取預檢結果
-    
-    // 處理預檢請求
-    if (req.method === 'OPTIONS') {
-        console.log(`預檢請求來自: ${origin || '未知來源'}`);
-        res.sendStatus(200);
-    } else {
-        next();
-    }
-});
-
-let httpsOptions;
-try {
-    httpsOptions = {
-        key: fs.readFileSync(path.join(__dirname, 'key.pem')),
-        cert: fs.readFileSync(path.join(__dirname, 'cert.pem'))
-    };
-} catch (e) {
-    console.warn("SSL 憑證檔案 (key.pem, cert.pem) 未找到，將以不安全的 HTTP 模式啟動。");
-}
 
 // ★ Modbus 用戶端
 const client = new ModbusRTU();
@@ -177,28 +99,41 @@ let energyData = {
 
 // ★★★ 建立一個專門用來計算總量的函式，確保數據同步 ★★★
 function calculateTotals() {
-    // 計算電力總量
-    energyData.power.total.realtime = energyData.power.residential.realtime + energyData.power.office.realtime;
-    energyData.power.total.today = energyData.power.residential.today + energyData.power.office.today;
-    energyData.power.total.month = energyData.power.residential.month + energyData.power.office.month;
+    // 計算電力總量 - 確保不會有負值
+    energyData.power.total.realtime = Math.max(0, energyData.power.residential.realtime + energyData.power.office.realtime);
+    energyData.power.total.today = Math.max(0, energyData.power.residential.today + energyData.power.office.today);
+    energyData.power.total.month = Math.max(0, energyData.power.residential.month + energyData.power.office.month);
 
-    // ★★★ 新增：計算水度數總量 ★★★
-    energyData.water.todayTotal = energyData.water.todayBreakdown.residential + energyData.water.todayBreakdown.office;
-    energyData.water.monthTotal = energyData.water.monthBreakdown.residential + energyData.water.monthBreakdown.office;
+    // ★★★ 新增：計算水度數總量 - 確保不會有負值 ★★★
+    energyData.water.todayTotal = Math.max(0, energyData.water.todayBreakdown.residential + energyData.water.todayBreakdown.office);
+    energyData.water.monthTotal = Math.max(0, energyData.water.monthBreakdown.residential + energyData.water.monthBreakdown.office);
 
-    // 計算每小時用電總量
+    // 計算每小時用電總量 - 確保不會有負值
     for (let i = 0; i < 24; i++) {
-        energyData.hourlyData.total[i] = energyData.hourlyData.residential[i] + energyData.hourlyData.office[i];
+        energyData.hourlyData.total[i] = Math.max(0, energyData.hourlyData.residential[i] + energyData.hourlyData.office[i]);
     }
+    
+    // 額外保護：確保所有分區數據都不是負值
+    energyData.power.residential.realtime = Math.max(0, energyData.power.residential.realtime);
+    energyData.power.residential.today = Math.max(0, energyData.power.residential.today);
+    energyData.power.residential.month = Math.max(0, energyData.power.residential.month);
+    energyData.power.office.realtime = Math.max(0, energyData.power.office.realtime);
+    energyData.power.office.today = Math.max(0, energyData.power.office.today);
+    energyData.power.office.month = Math.max(0, energyData.power.office.month);
 }
 
 // 模擬數據即時變化
 setInterval(() => {
-    // 更新分區電力數據
-    energyData.power.residential.realtime += (Math.random() - 0.5) * 5;
+    // 更新分區電力數據 - 確保不會產生負值
+    const residentialChange = (Math.random() - 0.5) * 5;
+    const officeChange = (Math.random() - 0.5) * 5;
+    
+    // 確保即時用電量不會變成負值
+    energyData.power.residential.realtime = Math.max(0, energyData.power.residential.realtime + residentialChange);
     energyData.power.residential.today += Math.random() * 2;
     energyData.power.residential.month += Math.random() * 2;
-    energyData.power.office.realtime += (Math.random() - 0.5) * 5;
+    
+    energyData.power.office.realtime = Math.max(0, energyData.power.office.realtime + officeChange);
     energyData.power.office.today += Math.random() * 2;
     energyData.power.office.month += Math.random() * 2;
 
@@ -218,6 +153,11 @@ setInterval(() => {
     
     // ★★★ 在每次更新分區數據後，都重新計算一次總量 ★★★
     calculateTotals();
+    
+    // 監控負值 (可選的調試信息)
+    if (energyData.power.residential.realtime < 0 || energyData.power.office.realtime < 0) {
+        console.warn(`[能源監控] 檢測到負值: 住宅=${energyData.power.residential.realtime}, 辦公=${energyData.power.office.realtime}`);
+    }
 
 }, 2000);
 
@@ -1243,36 +1183,9 @@ app.post('/api/ac/:floor/:id/swing', (req, res) => {
     }
 });
 
-// ★ 健康檢查和根路徑端點
-app.get('/', (req, res) => {
-    res.json({ 
-        message: 'BMS Backend Server is running!', 
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        cors: 'enabled for https://workkkkkkez00m.github.io'
-    });
-});
-
-app.get('/health', (req, res) => {
-    res.json({ status: 'OK', timestamp: new Date().toISOString() });
-});
-
 const server = http.createServer(app);
 
 // --- 啟動伺服器 ---
-if (httpsOptions) {
-    const server = https.createServer(httpsOptions, app);
-    server.listen(PORT, () => {
-        console.log(`後端 HTTPS 伺服器正在 https://localhost:${PORT} 運行`);
-        console.log(`🌐 CORS 已啟用彈性配置，支援多種來源連線`);
-        console.log(`✅ 支援 GitHub Pages、Netlify、Vercel 和本地開發環境`);
-    });
-} else {
-    // 如果在本地端找不到憑證，就用不安全的 HTTP 模式啟動，方便除錯
-    app.listen(PORT, () => {
-        console.log(`後端 HTTP 伺服器正在 port ${PORT} 運行`);
-        console.log(`🌐 CORS 已啟用彈性配置，支援多種來源連線`);
-        console.log(`✅ 支援 GitHub Pages、Netlify、Vercel 和本地開發環境`);
-        console.log(`📝 開發模式：任何本地端口都可以連線`);
-    });
-}
+app.listen(PORT, () => {
+    console.log(`後端伺服器正在 http://localhost:${PORT} 運行`);   
+});
