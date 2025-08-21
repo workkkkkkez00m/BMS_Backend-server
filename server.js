@@ -811,6 +811,72 @@ setInterval(async () => {
     }
 }, 3000);
 
+// ★★★ 新增：太陽能發電數據結構 ★★★
+let solarData = {
+    realtime: {
+        currentGeneration: 0,
+        homeUsage: 0,
+    },
+    today: {
+        totalGeneration: 0,
+    },
+    battery: {
+        level: 0,
+        isCharging: false
+    },
+    hourly: {
+        generation: Array(24).fill(0),
+        consumption: Array(24).fill(0)
+    }
+};
+
+// ★★★ 新增：模擬太陽能數據的函式 ★★★
+function updateSolarData() {
+    const now = new Date();
+    const hour = now.getHours();
+
+    // 模擬一天中的太陽能發電曲線 (早上6點到晚上6點)
+    const generationCurve = [0, 0, 0, 0, 0, 0.5, 2, 5, 8, 10, 12, 13, 12, 10, 8, 5, 2, 0.5, 0, 0, 0, 0, 0, 0];
+    const currentGeneration = generationCurve[hour] + (Math.random() - 0.5);
+
+    // 模擬住宅用電曲線
+    const consumptionCurve = [1, 0.8, 0.7, 0.6, 0.7, 1.5, 3, 4, 3, 2.5, 2, 2.2, 2.5, 2.3, 2, 2.5, 3.5, 5, 6, 5, 4, 3, 2, 1.5];
+    const currentConsumption = consumptionCurve[hour] + (Math.random() - 0.5);
+
+    // 模擬電池電量波動
+    let batteryCharge = solarData.battery.level;
+    const isCharging = currentGeneration > currentConsumption;
+    if (isCharging) {
+        batteryCharge += (currentGeneration - currentConsumption) * 0.1; // 充電效率
+    } else {
+        batteryCharge -= (currentConsumption - currentGeneration) * 0.1; // 放電
+    }
+    batteryCharge = Math.max(0, Math.min(100, batteryCharge)); // 確保電量在 0-100% 之間
+
+    // 更新 solarData 物件
+    solarData = {
+        realtime: {
+            currentGeneration: Math.max(0, currentGeneration),
+            homeUsage: Math.max(0, currentConsumption),
+        },
+        today: {
+            totalGeneration: solarData.today.totalGeneration + Math.max(0, currentGeneration / 3600 * 5), // 每5秒更新一次
+        },
+        battery: {
+            level: batteryCharge,
+            isCharging: isCharging
+        },
+        hourly: {
+            generation: generationCurve, // 暫時使用靜態曲線作為範例
+            consumption: consumptionCurve
+        }
+    };
+}
+
+// 啟動太陽能數據模擬
+setInterval(updateSolarData, 5000);
+
+
 // --- 建立 API 端點 ---
 app.get('/api/status', (req, res) => {
     res.json(monitoringPoints);
@@ -1182,6 +1248,22 @@ app.post('/api/ac/:floor/:id/swing', (req, res) => {
         res.status(404).json({ error: `AC unit with id ${id} not found on floor ${floor}.` });
     }
 });
+
+app.get('/api/solar', (req, res) => {    
+    const carbonReduction = solarData.today.totalGeneration * 0.495; // 碳排係數
+    const equivalentTrees = carbonReduction / 8.8; // 約 8.8 公斤/年/樹，換算為當日
+
+    // 將計算好的效益加入到回傳的資料中
+    const responseData = {
+        ...solarData,
+        environmentalBenefits: {
+            carbonReduction: carbonReduction,
+            equivalentTrees: equivalentTrees
+        }
+    };
+    res.json(responseData);
+});
+
 
 const server = http.createServer(app);
 
