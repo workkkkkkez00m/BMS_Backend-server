@@ -813,16 +813,13 @@ setInterval(async () => {
 
 // ★★★ 新增：太陽能發電數據結構 ★★★
 let solarData = {
-    realtime: {
-        currentGeneration: 0,
-        homeUsage: 0,
-    },
+    pv: 0,              // 太陽能發電功率 (kW)
+    grid: 0,            // 市電功率 (kW, >0 為賣電, <0 為買電)
+    load: 0,            // 負載用電功率 (kW)
+    batteryPower: 0,    // 電池功率 (kW, >0 為放電, <0 為充電)
+    batterySOC: 75.0,   // 電池電量百分比 (%)
     today: {
-        totalGeneration: 0,
-    },
-    battery: {
-        level: 0,
-        isCharging: false
+        totalGeneration: 15.5, // 本日累積發電量 (kWh)
     },
     hourly: {
         generation: Array(24).fill(0),
@@ -837,40 +834,52 @@ function updateSolarData() {
 
     // 模擬一天中的太陽能發電曲線 (早上6點到晚上6點)
     const generationCurve = [0, 0, 0, 0, 0, 0.5, 2, 5, 8, 10, 12, 13, 12, 10, 8, 5, 2, 0.5, 0, 0, 0, 0, 0, 0];
-    const currentGeneration = generationCurve[hour] + (Math.random() - 0.5);
+    const pvGeneration = generationCurve[hour] + (Math.random() - 0.5);
 
     // 模擬住宅用電曲線
     const consumptionCurve = [1, 0.8, 0.7, 0.6, 0.7, 1.5, 3, 4, 3, 2.5, 2, 2.2, 2.5, 2.3, 2, 2.5, 3.5, 5, 6, 5, 4, 3, 2, 1.5];
-    const currentConsumption = consumptionCurve[hour] + (Math.random() - 0.5);
+    const loadConsumption = consumptionCurve[hour] + (Math.random() - 0.5);
 
-    // 模擬電池電量波動
-    let batteryCharge = solarData.battery.level;
-    const isCharging = currentGeneration > currentConsumption;
-    if (isCharging) {
-        batteryCharge += (currentGeneration - currentConsumption) * 0.1; // 充電效率
-    } else {
-        batteryCharge -= (currentConsumption - currentGeneration) * 0.1; // 放電
+    // --- 核心能源調度邏輯 ---
+    let netPower = pvGeneration - loadConsumption; // 淨功率 = 發電 - 用電
+    let gridPower = 0;
+    let batteryPower = 0;
+    
+    const MAX_BATTERY_CHARGE_RATE = 5; // 電池最大充電功率 5kW
+    const MAX_BATTERY_DISCHARGE_RATE = 5; // 電池最大放電功率 5kW
+
+    if (netPower > 0) { // 有多餘的電力 (發電 > 用電)
+        // 優先充電
+        const chargePower = Math.min(netPower, MAX_BATTERY_CHARGE_RATE);
+        if (solarData.batterySOC < 100) {
+            batteryPower = -chargePower; // 負數代表充電
+            solarData.batterySOC += (chargePower / 60 / 60 * 5) * 10; // 模擬充電增加電量
+            solarData.batterySOC = Math.min(100, solarData.batterySOC);
+        }
+        // 充電後還有剩餘，就賣給電網
+        gridPower = netPower - chargePower;
+
+    } else { // 電力不足 (用電 > 發電)
+        const deficit = Math.abs(netPower);
+        // 優先從電池放電
+        const dischargePower = Math.min(deficit, MAX_BATTERY_DISCHARGE_RATE);
+        if (solarData.batterySOC > 0) {
+            batteryPower = dischargePower; // 正數代表放電
+            solarData.batterySOC -= (dischargePower / 60 / 60 * 5) * 10; // 模擬放電減少電量
+            solarData.batterySOC = Math.max(0, solarData.batterySOC);
+        }
+        // 如果電池不夠用，從市電買入
+        gridPower = -(deficit - dischargePower); // 負數代表從電網買電
     }
-    batteryCharge = Math.max(0, Math.min(100, batteryCharge)); // 確保電量在 0-100% 之間
 
     // 更新 solarData 物件
-    solarData = {
-        realtime: {
-            currentGeneration: Math.max(0, currentGeneration),
-            homeUsage: Math.max(0, currentConsumption),
-        },
-        today: {
-            totalGeneration: solarData.today.totalGeneration + Math.max(0, currentGeneration / 3600 * 5), // 每5秒更新一次
-        },
-        battery: {
-            level: batteryCharge,
-            isCharging: isCharging
-        },
-        hourly: {
-            generation: generationCurve, // 暫時使用靜態曲線作為範例
-            consumption: consumptionCurve
-        }
-    };
+    solarData.pv = Math.max(0, pvGeneration);
+    solarData.load = Math.max(0, loadConsumption);
+    solarData.grid = gridPower;
+    solarData.batteryPower = batteryPower;
+    solarData.today.totalGeneration += Math.max(0, pvGeneration / 3600 * 5);
+    solarData.hourly.generation = generationCurve;
+    solarData.hourly.consumption = consumptionCurve;
 }
 
 // 啟動太陽能數據模擬
@@ -1249,11 +1258,10 @@ app.post('/api/ac/:floor/:id/swing', (req, res) => {
     }
 });
 
-app.get('/api/solar', (req, res) => {    
-    const carbonReduction = solarData.today.totalGeneration * 0.495; // 碳排係數
-    const equivalentTrees = carbonReduction / 8.8; // 約 8.8 公斤/年/樹，換算為當日
+app.get('/api/solar', (req, res) => {
+    const carbonReduction = solarData.today.totalGeneration * 0.495;
+    const equivalentTrees = carbonReduction / 8.8;
 
-    // 將計算好的效益加入到回傳的資料中
     const responseData = {
         ...solarData,
         environmentalBenefits: {
