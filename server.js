@@ -888,6 +888,53 @@ function updateSolarData() {
 // 啟動太陽能數據模擬
 setInterval(updateSolarData, 5000);
 
+// ★★★ 新增：每日太陽能報告的數據生成邏輯 ★★★
+function generateDailySolarReport(dateStr) {
+    // 根據日期生成一個隨機種子，讓同一天的數據保持一致
+    const seed = dateStr.split('-').reduce((acc, val) => acc + parseInt(val), 0);
+    const random = (min, max) => {
+        const x = Math.sin(seed * 1.23) * 10000;
+        return parseFloat((min + (x - Math.floor(x)) * (max - min)).toFixed(2));
+    };
+
+    // 1. 模擬基礎數據
+    const totalGeneration = random(20, 150); // 每日總發電量 (kWh)
+    const totalConsumption = random(180, 350); // 每日總用電量 (kWh)
+
+    // 2. 模擬能源調度
+    let netPower = totalGeneration - totalConsumption;
+    let batteryCharged = 0, batteryDischarged = 0, gridImport = 0, gridExport = 0;
+    
+    const maxBatteryThroughput = random(10, 30); // 模擬電池單日可充放電量
+
+    if (netPower > 0) { // 發電 > 用電 (有剩餘)
+        batteryCharged = Math.min(netPower, maxBatteryThroughput);
+        gridExport = netPower - batteryCharged;
+    } else { // 用電 > 發電 (不足)
+        const deficit = Math.abs(netPower);
+        batteryDischarged = Math.min(deficit, maxBatteryThroughput);
+        gridImport = deficit - batteryDischarged;
+    }
+
+    // 3. 計算進階指標
+    const selfConsumption = totalGeneration - gridExport;
+    const selfConsumptionRate = totalGeneration > 0 ? parseFloat((selfConsumption / totalGeneration * 100).toFixed(2)) : 0;
+    const carbonReduction = parseFloat((totalGeneration * CARBON_EMISSION_FACTOR).toFixed(2));
+
+    // 4. 回傳符合 Excel 欄位的物件
+    return {
+        "日期": dateStr,
+        "總發電量(kWh)": totalGeneration,
+        "總用電量(kWh)": totalConsumption,
+        "電池充電量(kWh)": batteryCharged,
+        "電池放電量(kWh)": batteryDischarged,
+        "市電買入量(kWh)": gridImport,
+        "賣給市電量(kWh)": gridExport,
+        "綠電自用率(%)": selfConsumptionRate,
+        "減碳量(kg)": carbonReduction
+    };
+}
+
 
 // --- 建立 API 端點 ---
 app.get('/api/status', (req, res) => {
@@ -1275,6 +1322,23 @@ app.get('/api/solar', (req, res) => {
     res.json(responseData);
 });
 
+// ★★★「太陽能月份匯出」用的 API 端點 ★★★
+app.get('/api/monthly-solar-report', (req, res) => {
+    const { year, month } = req.query;
+    if (!year || !month) {
+        return res.status(400).json({ error: '缺少年份或月份參數' });
+    }
+
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const reportData = [];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        reportData.push(generateDailySolarReport(dateStr));
+    }
+    
+    res.json(reportData);
+});
 
 const server = http.createServer(app);
 
