@@ -837,7 +837,7 @@ function updateSolarData() {
     const pvGeneration = generationCurve[hour] + (Math.random() - 0.5);
 
     // 模擬住宅用電曲線
-    const loadConsumption = energyData.power.total.realtime / 1000.0;
+    const loadConsumption = energyData.power.total.realtime;
 
     // --- 核心能源調度邏輯 ---
     let netPower = pvGeneration - loadConsumption; // 淨功率 = 發電 - 用電
