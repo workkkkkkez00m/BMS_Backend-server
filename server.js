@@ -837,8 +837,7 @@ function updateSolarData() {
     const pvGeneration = generationCurve[hour] + (Math.random() - 0.5);
 
     // 模擬住宅用電曲線
-    const consumptionCurve = [1, 0.8, 0.7, 0.6, 0.7, 1.5, 3, 4, 3, 2.5, 2, 2.2, 2.5, 2.3, 2, 2.5, 3.5, 5, 6, 5, 4, 3, 2, 1.5];
-    const loadConsumption = consumptionCurve[hour] + (Math.random() - 0.5);
+    const loadConsumption = energyData.power.total.realtime / 1000.0;
 
     // --- 核心能源調度邏輯 ---
     let netPower = pvGeneration - loadConsumption; // 淨功率 = 發電 - 用電
@@ -878,8 +877,12 @@ function updateSolarData() {
     solarData.grid = gridPower;
     solarData.batteryPower = batteryPower;
     solarData.today.totalGeneration += Math.max(0, pvGeneration / 3600 * 5);
+    
+    // ★ 更新 hourly.consumption 來反映同步後的數據
+    const currentTotalConsumptionKWh = loadConsumption;
     solarData.hourly.generation = generationCurve;
-    solarData.hourly.consumption = consumptionCurve;
+    solarData.hourly.consumption.shift();
+    solarData.hourly.consumption.push(currentTotalConsumptionKWh);
 }
 
 // 啟動太陽能數據模擬
