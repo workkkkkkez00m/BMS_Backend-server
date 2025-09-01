@@ -1051,6 +1051,7 @@ function startRtspStreams() {
                     name: camera.id,
                     streamUrl: camera.streamUrl,
                     wsPort: streamPort,
+                    ffmpegPath: require('ffmpeg-static'),
                     ffmpegOptions: {
                         '-stats': '',
                         '-r': 30 // 影格率
