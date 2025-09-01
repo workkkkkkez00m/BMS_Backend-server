@@ -1485,6 +1485,12 @@ app.get('/api/cctv/:floor', (req, res) => {
     res.json(data);
 });
 
+// ★★★ 獲取「所有」攝影機的 API 端點 ★★★
+app.get('/api/cctv/all', (req, res) => {    
+    const allCameras = Object.values(cctvData).flat();
+    res.json(allCameras);
+});
+
 const server = http.createServer(app);
 
 // --- 啟動伺服器 ---
