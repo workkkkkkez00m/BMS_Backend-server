@@ -1033,7 +1033,7 @@ const cctvData = {
 };
 
 // ★★★ 模擬攝影機狀態隨機變化 ★★★
-setInterval(() => {
+/*setInterval(() => {
     Object.keys(cctvData).forEach(floor => {
         cctvData[floor].forEach(camera => {
             // 用一個較小的機率 (例如 5%) 來模擬狀態的隨機切換
@@ -1043,7 +1043,7 @@ setInterval(() => {
             }
         });
     });
-}, 5000); // 每 5 秒鐘檢查一次
+}, 5000);*/ // 每 5 秒鐘檢查一次
 
 // ★ 新增：啟動所有 RTSP 串流轉碼的函式
 function startRtspStreams() {
@@ -1488,6 +1488,7 @@ app.get('/api/cctv/:floor', (req, res) => {
 // ★★★ 獲取「所有」攝影機的 API 端點 ★★★
 app.get('/api/cctv/all', (req, res) => {    
     const allCameras = Object.values(cctvData).flat();
+    console.log(`[API /api/cctv/all] 準備回傳 ${allCameras.length} 台攝影機的資料。`);
     res.json(allCameras);
 });
 
