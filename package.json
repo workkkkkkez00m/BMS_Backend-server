@@ -10,13 +10,19 @@
   "engines": {
     "node": ">=16.0.0"
   },
-  "keywords": ["bms", "building-management", "iot", "modbus"],
+  "keywords": [
+    "bms",
+    "building-management",
+    "iot",
+    "modbus"
+  ],
   "author": "",
   "license": "ISC",
   "description": "Building Management System Backend Server",
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
-    "modbus-serial": "^8.0.21-no-serial-port"
+    "modbus-serial": "^8.0.21-no-serial-port",
+    "node-rtsp-stream": "^0.0.9"
   }
 }

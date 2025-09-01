@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const ModbusRTU = require("modbus-serial");
 const http = require('http');
+const Stream = require('node-rtsp-stream');
 
 const app = express();
 const PORT = 3000;
@@ -124,41 +125,57 @@ function calculateTotals() {
 
 // 模擬數據即時變化
 setInterval(() => {
-    // 更新分區電力數據 - 確保不會產生負值
-    const residentialChange = (Math.random() - 0.5) * 5;
-    const officeChange = (Math.random() - 0.5) * 5;
+    // 1. 獲取當前時間的小時 (0-23)
+    const hour = new Date().getHours();
+
+    // 2. 定義一天24小時的住宅大樓用電基礎值 (單位: kW)
+    const consumptionCurveKW = [
+      // 0:00 - 5:00 (深夜低谷)
+      60, 55, 50, 50, 55, 65,
+      // 6:00 - 10:00 (早晨小高峰)
+      120, 150, 130, 110, 100,
+      // 11:00 - 17:00 (白天平穩)
+      140, 150, 145, 140, 155, 160, 180,
+      // 18:00 - 22:00 (晚間尖峰)
+      280, 320, 350, 290, 220,
+      // 23:00 (睡前下降)
+      150
+    ];
+
+    // 3. 根據當前小時，計算住宅和公設的目標用電量
+    const targetTotalConsumption = consumptionCurveKW[hour];
+    const residentialRatio = 0.85;
+    const targetResidential = targetTotalConsumption * residentialRatio;
+    const targetOffice = targetTotalConsumption * (1 - residentialRatio);
+
+    // 4. 計算一個“有方向性”的變化量
+    const residentialDiff = targetResidential - energyData.power.residential.realtime;
+    const officeDiff = targetOffice - energyData.power.office.realtime;
+    const residentialChange = (residentialDiff * 0.1) + (Math.random() - 0.5) * 5;
+    const officeChange = (officeDiff * 0.1) + (Math.random() - 0.5) * 3;
     
-    // 確保即時用電量不會變成負值
+    // 5. 更新即時用電量
     energyData.power.residential.realtime = Math.max(0, energyData.power.residential.realtime + residentialChange);
+    energyData.power.office.realtime = Math.max(0, energyData.power.office.realtime + officeChange);
+    
+    // 更新累積數據
     energyData.power.residential.today += Math.random() * 2;
     energyData.power.residential.month += Math.random() * 2;
-    
-    energyData.power.office.realtime = Math.max(0, energyData.power.office.realtime + officeChange);
     energyData.power.office.today += Math.random() * 2;
     energyData.power.office.month += Math.random() * 2;
-
-    // ★★★ 修改：更新分區的水力數據 ★★★
     energyData.water.todayBreakdown.residential += Math.random() * 0.2;
     energyData.water.todayBreakdown.office += Math.random() * 0.1;
     energyData.water.monthBreakdown.residential += Math.random() * 0.2;
     energyData.water.monthBreakdown.office += Math.random() * 0.1;
     
-    // 更新每小時用電圖表數據
-    const newResKWh = Math.random() * 90 + 30;
-    const newOffKWh = Math.random() * 60 + 20;
-    energyData.hourlyData.residential.shift();
-    energyData.hourlyData.residential.push(newResKWh);
-    energyData.hourlyData.office.shift();
-    energyData.hourlyData.office.push(newOffKWh);
+    // ★ 關鍵修改：讓 hourlyData 的數據來源於真實的日夜曲線 ★
+    // 而不是舊的 Math.random()
+    energyData.hourlyData.residential = consumptionCurveKW.map(val => val * residentialRatio);
+    energyData.hourlyData.office = consumptionCurveKW.map(val => val * (1 - residentialRatio));
     
-    // ★★★ 在每次更新分區數據後，都重新計算一次總量 ★★★
+    // 7. 在每次更新分區數據後，都重新計算一次總量
     calculateTotals();
     
-    // 監控負值 (可選的調試信息)
-    if (energyData.power.residential.realtime < 0 || energyData.power.office.realtime < 0) {
-        console.warn(`[能源監控] 檢測到負值: 住宅=${energyData.power.residential.realtime}, 辦公=${energyData.power.office.realtime}`);
-    }
-
 }, 2000);
 
 // --- ★★★ 歷史紀錄數據生成邏輯 ★★★ ---
@@ -811,6 +828,245 @@ setInterval(async () => {
     }
 }, 3000);
 
+// ★★★ 新增：太陽能發電數據結構 ★★★
+let solarData = {
+    pv: 0,              // 太陽能發電功率 (kW)
+    grid: 0,            // 市電功率 (kW, >0 為賣電, <0 為買電)
+    load: 0,            // 負載用電功率 (kW)
+    batteryPower: 0,    // 電池功率 (kW, >0 為放電, <0 為充電)
+    batterySOC: 75.0,   // 電池電量百分比 (%)
+    today: {
+        totalGeneration: 15.5, // 本日累積發電量 (kWh)
+    },
+    hourly: {
+        generation: Array(24).fill(0),
+        consumption: Array(24).fill(0)
+    }
+};
+
+// ★★★ 新增：模擬太陽能數據的函式 ★★★
+function updateSolarData() {
+    const now = new Date();
+    const hour = now.getHours();
+
+    // 模擬一天中的太陽能發電曲線 (早上6點到晚上6點)
+    const generationCurve = [0, 0, 0, 0, 0, 0.5, 2, 5, 8, 10, 12, 13, 12, 10, 8, 5, 2, 0.5, 0, 0, 0, 0, 0, 0];
+    // 確保 pvGeneration 不為負值
+    const pvGeneration = Math.max(0, generationCurve[hour] + (Math.random() - 0.5));
+
+    // 模擬住宅用電曲線 (與 energyData 同步)
+    const loadConsumption = energyData.power.total.realtime;   
+    
+    const BATTERY_CHARGE_RESERVATION_RATE = 0.3; // ★ 保留 30% 的太陽能發電優先給電池充電
+    const MIN_SOC_FOR_DISCHARGE = 20.0; // ★ 電池電量低於 20% 時，停止放電以保護電池
+    const MAX_BATTERY_CHARGE_RATE = 5;
+    const MAX_BATTERY_DISCHARGE_RATE = 5;
+
+    // 2. 初始化變數
+    let gridPower = 0;
+    let batteryPower = 0;
+    
+    // 3. 計算分配給負載和電池的太陽能電力
+    let pvToCharge = pvGeneration * BATTERY_CHARGE_RESERVATION_RATE;
+    let pvToLoad = pvGeneration * (1 - BATTERY_CHARGE_RESERVATION_RATE);
+    let deficit = loadConsumption - pvToLoad; // 負載還需要多少電
+
+    if (deficit > 0) { // 太陽能不足以供應負載
+        // 嘗試從電池放電來補足缺口
+        if (solarData.batterySOC > MIN_SOC_FOR_DISCHARGE) {
+            const dischargePower = Math.min(deficit, MAX_BATTERY_DISCHARGE_RATE);
+            batteryPower = dischargePower; // 正數代表放電
+            deficit -= dischargePower;
+        }
+    } else {
+        // 太陽能供應負載後還有剩餘，將剩餘部分也拿去充電
+        pvToCharge += Math.abs(deficit);
+        deficit = 0;
+    }
+
+    // 5. 處理電池充電
+    if (pvToCharge > 0 && solarData.batterySOC < 100) {
+        const actualChargePower = Math.min(pvToCharge, MAX_BATTERY_CHARGE_RATE);
+        // 如果電池同時在放電和充電，這是不可能的，所以要合併
+        batteryPower -= actualChargePower; // 負數代表充電
+    }
+
+    // 6. 處理與市電的互動
+    if (deficit > 0) {
+        // 如果經過太陽能和電池供電後，電力仍然不足，則從市電買電
+        gridPower = -deficit; // 負數代表買電
+    } else {
+        // 如果供應完負載和電池充電後，太陽能還有剩餘，則賣給市電
+        const surplus = pvGeneration - loadConsumption - Math.abs(batteryPower);
+        if (surplus > 0) {
+            gridPower = surplus; // 正數代表賣電
+        }
+    }
+
+    // 7. 更新電池電量 (SOC)
+    if (batteryPower !== 0) {
+        const socChange = (batteryPower / 50) * (5/3600) * 100; // 假設電池容量為 50kWh
+        solarData.batterySOC -= socChange; // 充電為負，所以用減
+        solarData.batterySOC = Math.max(0, Math.min(100, solarData.batterySOC));
+    }
+
+    // 8. 更新最終的 solarData 物件
+    solarData.pv = pvGeneration;
+    solarData.load = loadConsumption;
+    solarData.grid = gridPower;
+    solarData.batteryPower = batteryPower;
+    solarData.today.totalGeneration += pvGeneration / (3600 / 5); // 5秒累積一次
+    
+    // ★ 關鍵修改：讓太陽能儀表板的圖表也使用同步的日夜曲線數據 ★
+    solarData.hourly.generation = generationCurve;
+    solarData.hourly.consumption = energyData.hourlyData.total; // 直接使用 energyData 計算好的總量曲線
+}
+
+// 啟動太陽能數據模擬
+setInterval(updateSolarData, 5000);
+
+// ★★★ 新增：每日太陽能報告的數據生成邏輯 ★★★
+function generateDailySolarReport(dateStr) {
+    // 根據日期生成一個隨機種子，讓同一天的數據保持一致
+    const seed = dateStr.split('-').reduce((acc, val) => acc + parseInt(val), 0);
+    const random = (min, max) => {
+        const x = Math.sin(seed * 1.23) * 10000;
+        return parseFloat((min + (x - Math.floor(x)) * (max - min)).toFixed(2));
+    };
+
+    // 1. 模擬基礎數據
+    const totalGeneration = random(20, 150); // 每日總發電量 (kWh)
+    const totalConsumption = random(180, 350); // 每日總用電量 (kWh)
+
+    // 2. 模擬能源調度
+    let netPower = totalGeneration - totalConsumption;
+    let batteryCharged = 0, batteryDischarged = 0, gridImport = 0, gridExport = 0;
+    
+    const maxBatteryThroughput = random(10, 30); // 模擬電池單日可充放電量
+
+    if (netPower > 0) { // 發電 > 用電 (有剩餘)
+        batteryCharged = Math.min(netPower, maxBatteryThroughput);
+        gridExport = netPower - batteryCharged;
+    } else { // 用電 > 發電 (不足)
+        const deficit = Math.abs(netPower);
+        batteryDischarged = Math.min(deficit, maxBatteryThroughput);
+        gridImport = deficit - batteryDischarged;
+    }
+
+    // 3. 計算進階指標
+    const selfConsumption = totalGeneration - gridExport;
+    const selfConsumptionRate = totalGeneration > 0 ? parseFloat((selfConsumption / totalGeneration * 100).toFixed(2)) : 0;
+    const carbonReduction = parseFloat((totalGeneration * CARBON_EMISSION_FACTOR).toFixed(2));
+
+    // 4. 回傳符合 Excel 欄位的物件
+    return {
+        "日期": dateStr,
+        "總發電量(kWh)": totalGeneration,
+        "總用電量(kWh)": totalConsumption,
+        "電池充電量(kWh)": batteryCharged,
+        "電池放電量(kWh)": batteryDischarged,
+        "市電買入量(kWh)": gridImport,
+        "賣給市電量(kWh)": gridExport,
+        "綠電自用率(%)": selfConsumptionRate,
+        "減碳量(kg)": carbonReduction
+    };
+}
+
+// ★★★ CCTV 攝影機數據 (包含串流位址) ★★★
+const cctvData = {
+    "5f": [
+        { 
+            id: "CCTV-5F-01", 
+            name: "CCTV_1",    // 3D模型中的物件名稱
+            locationName: "五樓攝影機01",  // 顯示在UI上的名稱
+            status: "online",
+            // ★ 新增：預留給真實影像串流的位址 (例如 RTSP, HTTP Stream, WebRTC 等)
+            streamUrl: "rtsp://192.168.5.101:554/stream1" 
+        },
+        { 
+            id: "CCTV-5F-02", 
+            name: "CCTV001_2", 
+            locationName: "五樓攝影機02", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.102:554/stream1"
+        },
+        { 
+            id: "CCTV-5F-03", 
+            name: "CCTV002_1", 
+            locationName: "五樓攝影機03", 
+            status: "offline", // 模擬一台離線的攝影機
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.103:554/stream1"
+        },
+        { 
+            id: "CCTV-5F-04", 
+            name: "CCTV003_1", 
+            locationName: "五樓攝影機04", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.104:554/stream1"
+        },
+        { 
+            id: "CCTV-5F-05", 
+            name: "CCTV004_1", 
+            locationName: "五樓攝影機05", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.104:554/stream1"
+        },
+        { 
+            id: "CCTV-5F-06", 
+            name: "CCTV005_1", 
+            locationName: "五樓攝影機06", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.104:554/stream1"
+        }
+    ]
+};
+
+// ★★★ 模擬攝影機狀態隨機變化 ★★★
+setInterval(() => {
+    Object.keys(cctvData).forEach(floor => {
+        cctvData[floor].forEach(camera => {
+            // 用一個較小的機率 (例如 5%) 來模擬狀態的隨機切換
+            if (Math.random() < 0.05) {
+                camera.status = (camera.status === "online") ? "offline" : "online";
+                console.log(`CCTV 狀態變更: ${floor} - ${camera.locationName} 的狀態為 ${camera.status}`);
+            }
+        });
+    });
+}, 5000); // 每 5 秒鐘檢查一次
+
+// ★ 新增：啟動所有 RTSP 串流轉碼的函式
+function startRtspStreams() {
+    // 我們為每台攝影機分配一個 WebSocket 埠號，從 9990 開始
+    let streamPort = 9990; 
+
+    Object.keys(cctvData).forEach(floor => {
+        cctvData[floor].forEach(camera => {
+            if (camera.streamUrl && camera.status === 'online') {
+                const stream = new Stream({
+                    name: camera.id,
+                    streamUrl: camera.streamUrl,
+                    wsPort: streamPort,
+                    ffmpegOptions: {
+                        '-stats': '',
+                        '-r': 30 // 影格率
+                    }
+                });
+
+                // ★ 為前端預留一個新的 WebSocket 位址
+                camera.websocketUrl = `ws://localhost:${streamPort}`;
+                console.log(`影像轉碼服務已為 ${camera.locationName} 啟動，串流位置: ${camera.websocketUrl}`);
+
+                streamPort++; // 為下一台攝影機準備不同的埠號
+            }
+        });
+    });
+}
+
 // --- 建立 API 端點 ---
 app.get('/api/status', (req, res) => {
     res.json(monitoringPoints);
@@ -825,8 +1081,8 @@ app.get('/api/historical-power', (req, res) => {
     if (!date) {
         return res.status(400).json({ error: '缺少日期參數' });
     }
-    const historicalData = generateHistoricalData(date);
-    res.json(historicalData);
+    const dailySolarReport = generateDailySolarReport(date);
+    res.json(dailySolarReport);
 });
 
 // ★★★ 專門給「月份匯出」用的 API 端點 ★★★
@@ -1183,9 +1439,49 @@ app.post('/api/ac/:floor/:id/swing', (req, res) => {
     }
 });
 
+app.get('/api/solar', (req, res) => {
+    const carbonReduction = solarData.today.totalGeneration * 0.495;
+    const equivalentTrees = carbonReduction / 8.8;
+
+    const responseData = {
+        ...solarData,
+        environmentalBenefits: {
+            carbonReduction: carbonReduction,
+            equivalentTrees: equivalentTrees
+        }
+    };
+    res.json(responseData);
+});
+
+// ★★★「太陽能月份匯出」用的 API 端點 ★★★
+app.get('/api/monthly-solar-report', (req, res) => {
+    const { year, month } = req.query;
+    if (!year || !month) {
+        return res.status(400).json({ error: '缺少年份或月份參數' });
+    }
+
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const reportData = [];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        reportData.push(generateDailySolarReport(dateStr));
+    }
+    
+    res.json(reportData);
+});
+
+// ★★★「CCTV 系統」用的 API 端點 ★★★
+app.get('/api/cctv/:floor', (req, res) => {
+    const { floor } = req.params;
+    const data = cctvData[floor] || []; // 如果找不到該樓層數據，就回傳空陣列
+    res.json(data);
+});
+
 const server = http.createServer(app);
 
 // --- 啟動伺服器 ---
 app.listen(PORT, () => {
     console.log(`後端伺服器正在 http://localhost:${PORT} 運行`);   
+    startRtspStreams();
 });
