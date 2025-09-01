@@ -981,7 +981,8 @@ const cctvData = {
             locationName: "五樓攝影機01",  // 顯示在UI上的名稱
             status: "online",
             // ★ 新增：預留給真實影像串流的位址 (例如 RTSP, HTTP Stream, WebRTC 等)
-            streamUrl: "rtsp://192.168.5.101:554/stream1" 
+            streamUrl: "rtsp://192.168.5.101:554/stream1",
+            floor: "5f"
         },
         { 
             id: "CCTV-5F-02", 
@@ -989,7 +990,8 @@ const cctvData = {
             locationName: "五樓攝影機02", 
             status: "online",
             // ★ 新增：預留串流位址
-            streamUrl: "rtsp://192.168.5.102:554/stream1"
+            streamUrl: "rtsp://192.168.5.102:554/stream1",
+            floor: "5f"
         },
         { 
             id: "CCTV-5F-03", 
@@ -997,7 +999,8 @@ const cctvData = {
             locationName: "五樓攝影機03", 
             status: "offline", // 模擬一台離線的攝影機
             // ★ 新增：預留串流位址
-            streamUrl: "rtsp://192.168.5.103:554/stream1"
+            streamUrl: "rtsp://192.168.5.103:554/stream1",
+            floor: "5f"
         },
         { 
             id: "CCTV-5F-04", 
@@ -1005,7 +1008,8 @@ const cctvData = {
             locationName: "五樓攝影機04", 
             status: "online",
             // ★ 新增：預留串流位址
-            streamUrl: "rtsp://192.168.5.104:554/stream1"
+            streamUrl: "rtsp://192.168.5.104:554/stream1",
+            floor: "5f"
         },
         { 
             id: "CCTV-5F-05", 
@@ -1013,7 +1017,8 @@ const cctvData = {
             locationName: "五樓攝影機05", 
             status: "online",
             // ★ 新增：預留串流位址
-            streamUrl: "rtsp://192.168.5.104:554/stream1"
+            streamUrl: "rtsp://192.168.5.104:554/stream1",
+            floor: "5f"
         },
         { 
             id: "CCTV-5F-06", 
@@ -1021,7 +1026,8 @@ const cctvData = {
             locationName: "五樓攝影機06", 
             status: "online",
             // ★ 新增：預留串流位址
-            streamUrl: "rtsp://192.168.5.104:554/stream1"
+            streamUrl: "rtsp://192.168.5.104:554/stream1",
+            floor: "5f"
         }
     ]
 };
