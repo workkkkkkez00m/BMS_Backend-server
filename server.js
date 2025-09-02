@@ -974,6 +974,230 @@ function generateDailySolarReport(dateStr) {
 
 // ★★★ CCTV 攝影機數據 (包含串流位址) ★★★
 const cctvData = {
+    "1f": [
+        { 
+            id: "CCTV-1F-01", 
+            name: "01CCTV_1",    // 3D模型中的物件名稱
+            locationName: "一樓攝影機01",  // 顯示在UI上的名稱
+            status: "online",
+            // ★ 新增：預留給真實影像串流的位址 (例如 RTSP, HTTP Stream, WebRTC 等)
+            streamUrl: "rtsp://192.168.5.111:554/stream1",
+            floor: "1f"
+        },
+        { 
+            id: "CCTV-1F-02", 
+            name: "01CCTV001_2", 
+            locationName: "一樓攝影機02", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.112:554/stream1",
+            floor: "1f"
+        },
+        { 
+            id: "CCTV-1F-03", 
+            name: "01CCTV002_1", 
+            locationName: "一樓攝影機03", 
+            status: "offline", // 模擬一台離線的攝影機
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.113:554/stream1",
+            floor: "1f"
+        },
+        { 
+            id: "CCTV-1F-04", 
+            name: "01CCTV003_1", 
+            locationName: "一樓攝影機04", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.114:554/stream1",
+            floor: "1f"
+        },
+        { 
+            id: "CCTV-1F-05", 
+            name: "01CCTV004_1", 
+            locationName: "一樓攝影機05", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.115:554/stream1",
+            floor: "1f"
+        },
+        { 
+            id: "CCTV-1F-06", 
+            name: "CCTV005_1", 
+            locationName: "一樓攝影機06", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.116:554/stream1",
+            floor: "1f"
+        }
+    ],
+    "2f": [
+        { 
+            id: "CCTV-2F-01", 
+            name: "02CCTV_1",    // 3D模型中的物件名稱
+            locationName: "二樓攝影機01",  // 顯示在UI上的名稱
+            status: "online",
+            // ★ 新增：預留給真實影像串流的位址 (例如 RTSP, HTTP Stream, WebRTC 等)
+            streamUrl: "rtsp://192.168.5.121:554/stream1",
+            floor: "2f"
+        },
+        { 
+            id: "CCTV-2F-02", 
+            name: "02CCTV001_2", 
+            locationName: "二樓攝影機02", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.122:554/stream1",
+            floor: "2f"
+        },
+        { 
+            id: "CCTV-2F-03", 
+            name: "02CCTV002_1", 
+            locationName: "二樓攝影機03", 
+            status: "offline", // 模擬一台離線的攝影機
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.123:554/stream1",
+            floor: "2f"
+        },
+        { 
+            id: "CCTV-2F-04", 
+            name: "02CCTV003_1", 
+            locationName: "二樓攝影機04", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.124:554/stream1",
+            floor: "2f"
+        },
+        { 
+            id: "CCTV-2F-05", 
+            name: "02CCTV004_1", 
+            locationName: "二樓攝影機05", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.125:554/stream1",
+            floor: "2f"
+        },
+        { 
+            id: "CCTV-2F-06", 
+            name: "CCTV005_1", 
+            locationName: "二樓攝影機06", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.126:554/stream1",
+            floor: "2f"
+        }
+    ],
+    "3f": [
+        { 
+            id: "CCTV-3F-01", 
+            name: "03CCTV_1",    // 3D模型中的物件名稱
+            locationName: "三樓攝影機01",  // 顯示在UI上的名稱
+            status: "online",
+            // ★ 新增：預留給真實影像串流的位址 (例如 RTSP, HTTP Stream, WebRTC 等)
+            streamUrl: "rtsp://192.168.5.131:554/stream1",
+            floor: "3f"
+        },
+        { 
+            id: "CCTV-3F-02", 
+            name: "03CCTV001_2", 
+            locationName: "三樓攝影機02", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.132:554/stream1",
+            floor: "3f"
+        },
+        { 
+            id: "CCTV-3F-03", 
+            name: "03CCTV002_1", 
+            locationName: "三樓攝影機03", 
+            status: "offline", // 模擬一台離線的攝影機
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.133:554/stream1",
+            floor: "3f"
+        },
+        { 
+            id: "CCTV-3F-04", 
+            name: "03CCTV003_1", 
+            locationName: "三樓攝影機04", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.134:554/stream1",
+            floor: "3f"
+        },
+        { 
+            id: "CCTV-3F-05", 
+            name: "03CCTV004_1", 
+            locationName: "三樓攝影機05", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.135:554/stream1",
+            floor: "3f"
+        },
+        { 
+            id: "CCTV-3F-06", 
+            name: "03CCTV005_1", 
+            locationName: "三樓攝影機06", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.136:554/stream1",
+            floor: "3f"
+        }
+    ],
+    "4f": [
+        { 
+            id: "CCTV-4F-01", 
+            name: "04CCTV_1",    // 3D模型中的物件名稱
+            locationName: "四樓攝影機01",  // 顯示在UI上的名稱
+            status: "online",
+            // ★ 新增：預留給真實影像串流的位址 (例如 RTSP, HTTP Stream, WebRTC 等)
+            streamUrl: "rtsp://192.168.5.141:554/stream1",
+            floor: "4f"
+        },
+        { 
+            id: "CCTV-4F-02", 
+            name: "04CCTV001_2", 
+            locationName: "五樓攝影機02", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.142:554/stream1",
+            floor: "4f"
+        },
+        { 
+            id: "CCTV-4F-03", 
+            name: "04CCTV002_1", 
+            locationName: "四樓攝影機03", 
+            status: "offline", // 模擬一台離線的攝影機
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.143:554/stream1",
+            floor: "4f"
+        },
+        { 
+            id: "CCTV-4F-04", 
+            name: "04CCTV003_1", 
+            locationName: "四樓攝影機04", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.144:554/stream1",
+            floor: "4f"
+        },
+        { 
+            id: "CCTV-4F-05", 
+            name: "04CCTV004_1", 
+            locationName: "五樓攝影機05", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.145:554/stream1",
+            floor: "4f"
+        },
+        { 
+            id: "CCTV-4F-06", 
+            name: "04CCTV005_1", 
+            locationName: "四樓攝影機06", 
+            status: "online",
+            // ★ 新增：預留串流位址
+            streamUrl: "rtsp://192.168.5.146:554/stream1",
+            floor: "4f"
+        }
+    ],
     "5f": [
         { 
             id: "CCTV-5F-01", 
