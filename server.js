@@ -7,26 +7,7 @@ const Stream = require('node-rtsp-stream');
 
 const app = express();
 const PORT = 3000;
-app.use(cors({
-    origin: [
-        'http://127.0.0.1:5503',
-        'http://localhost:5503',
-        'https://www.tripleswav.com'
-    ]
-}));
-app.use(cors({
-    origin: function (origin, callback) {
-        // 允許沒有 origin 的請求 (例如來自 Postman 或伺服器自身的請求)
-        if (!origin) return callback(null, true);
-
-        // 如果請求的來源在我們的白名單中，就允許它
-        if (allowedOrigins.indexOf(origin) === -1) {
-            const msg = '此來源的 CORS 政策不允許存取: ' + origin;
-            return callback(new Error(msg), false);
-        }
-        return callback(null, true);
-    }
-}));
+app.use(cors());
 app.use(express.json());
 
 // ★ Modbus 用戶端
