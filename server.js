@@ -7,7 +7,12 @@ const Stream = require('node-rtsp-stream');
 
 const app = express();
 const PORT = 3000;
-app.use(cors());
+app.use(cors({
+    origin: [
+        'http://127.0.0.1:5503', // 允許您的 VS Code Live Server
+        'http://localhost:5503'  // 同上，有時 IP 會解析為 localhost        
+    ]
+}));
 app.use(express.json());
 
 // ★ Modbus 用戶端
