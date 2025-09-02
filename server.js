@@ -1752,5 +1752,5 @@ const server = http.createServer(app);
 // --- 啟動伺服器 ---
 app.listen(PORT, () => {
     console.log(`後端伺服器正在 http://localhost:${PORT} 運行`);   
-    startRtspStreams();
+    //startRtspStreams();
 });
