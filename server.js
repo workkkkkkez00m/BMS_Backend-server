@@ -1032,6 +1032,8 @@ const cctvData = {
     ]
 };
 
+console.log('cctvData 初始化:', cctvData);
+
 // ★★★ 模擬攝影機狀態隨機變化 ★★★
 /*setInterval(() => {
     Object.keys(cctvData).forEach(floor => {
@@ -1478,18 +1480,28 @@ app.get('/api/monthly-solar-report', (req, res) => {
     res.json(reportData);
 });
 
+app.get('/api/cctv/all', (req, res) => {
+    try {
+        // 檢查 cctvData 是否為一個有效的物件
+        if (cctvData && typeof cctvData === 'object' && Object.keys(cctvData).length > 0) {
+            const allCameras = Object.values(cctvData).flat();
+            console.log(`[API /api/cctv/all] 成功處理並回傳 ${allCameras.length} 台攝影機的資料。`);
+            res.json(allCameras);
+        } else {
+            console.warn('[API /api/cctv/all] 警告: cctvData 是空的或無效的，回傳空陣列 []。');
+            res.json([]);
+        }
+    } catch (error) {
+        console.error('[API /api/cctv/all] 執行時發生未預期的錯誤:', error);
+        res.status(500).json([]); // 發生任何錯誤都回傳空陣列
+    }
+});
+
 // ★★★「CCTV 系統」用的 API 端點 ★★★
 app.get('/api/cctv/:floor', (req, res) => {
     const { floor } = req.params;
     const data = cctvData[floor] || []; // 如果找不到該樓層數據，就回傳空陣列
     res.json(data);
-});
-
-// ★★★ 獲取「所有」攝影機的 API 端點 ★★★
-app.get('/api/cctv/all', (req, res) => {    
-    const allCameras = Object.values(cctvData).flat();
-    console.log(`[API /api/cctv/all] 準備回傳 ${allCameras.length} 台攝影機的資料。`);
-    res.json(allCameras);
 });
 
 const server = http.createServer(app);
